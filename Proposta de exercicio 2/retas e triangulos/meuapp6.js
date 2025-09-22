@@ -54,11 +54,10 @@ function main() {
   }
   
   alert("Digite 'e' para desenhar linhas, 'c' para desenhar triângulos e 'k' para trocar a cor");
-  // === State Variables: Declared ONCE here ===
   let count = 0;
-  let vert = []; // Stores the two clicks for a new line
-  let verticesDaUltimaLinha = []; // Stores all points of the last drawn line
-  let key = null; // Stores the last key pressed
+  let vert = []; 
+  let verticesDaUltimaLinha = []; 
+  let key = null; 
 
   const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
   const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
@@ -119,7 +118,6 @@ function main() {
           pontosNDC.push(x, y);
         }
 
-        // 1. SAVE the points of the line we just calculated
         verticesDaUltimaLinha = pontosNDC;
 
         // Set a new random color for the new line
@@ -205,5 +203,6 @@ function main() {
   // Initial clear of the canvas
   drawScene(0); 
 }
+
 
 main();
