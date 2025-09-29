@@ -15,7 +15,7 @@
             }
         `;
 
-        // Biblioteca de matrizes que você forneceu
+        // Biblioteca de matrizes m3 
         var m3 = {
             identity: function() { return [1,0,0, 0,1,0, 0,0,1]; },
             multiply: function(a,b) { var a00=a[0],a01=a[3],a02=a[6],a10=a[1],a11=a[4],a12=a[7],a20=a[2],a21=a[5],a22=a[8],b00=b[0],b01=b[3],b02=b[6],b10=b[1],b11=b[4],b12=b[7],b20=b[2],b21=b[5],b22=b[8]; return [a00*b00+a01*b10+a02*b20, a10*b00+a11*b10+a12*b20, a20*b00+a21*b10+a22*b20, a00*b01+a01*b11+a02*b21, a10*b01+a11*b11+a12*b21, a20*b01+a21*b11+a22*b21, a00*b02+a01*b12+a02*b22, a10*b02+a11*b12+a12*b22, a20*b02+a21*b12+a22*b22]; },
@@ -35,8 +35,6 @@
                 alert("Seu navegador não suporta WebGL. Tente o Chrome ou Firefox.");
                 return;
             }
-
-            // --- Compilação e Linkagem dos Shaders (sem alteração) ---
             function createShader(gl, type, source) { const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader); if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) { console.error('Erro ao compilar shader:', gl.getShaderInfoLog(shader)); gl.deleteShader(shader); return null; } return shader; }
             function createProgram(gl, vertexShader, fragmentShader) { const program = gl.createProgram(); gl.attachShader(program, vertexShader); gl.attachShader(program, fragmentShader); gl.linkProgram(program); if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { console.error('Erro ao linkar programa:', gl.getProgramInfoLog(program)); gl.deleteProgram(program); return null; } return program; }
             const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
@@ -48,7 +46,7 @@
             const matrixUniformLocation = gl.getUniformLocation(program, "u_matrix");
 
 
-            // --- Definição da Geometria ---
+            // Definição da Geometria
             const cabecaVertices = new Float32Array([-0.2,0.2, -0.2,0.5, 0.2,0.2, 0.2,0.2, 0.2,0.5, -0.2,0.5]);
             const corpoVertices = new Float32Array([-0.3,0.2, -0.3,-0.2, 0.3,-0.2, -0.3,0.2, 0.3,0.2, 0.3,-0.2]);
             const pernaEsquerdaVertices = new Float32Array([-0.2,-0.2, -0.2,-0.4, -0.1,-0.2, -0.1,-0.2, -0.1,-0.4, -0.2,-0.4]);
@@ -62,10 +60,10 @@
             const olhoDireitoVertices = createCircleVertices(0.1, 0.4, 0.044, 100);
             const olhoEsquerdoVertices = createCircleVertices(-0.1, 0.4, 0.044, 100);
             
-            // --- NOVO: Função para criar os vértices do coração ---
+            //Função para criar os vértices do coração???
             function createHeartVertices() {
                 const scale = 0.9; // Ajusta o tamanho do coração
-                // Ponto central para o TRIANGLE_FAN
+
                 let vertices = [0.0, 0.0];
                 // Pontos do perímetro do coração
                 const points = [
@@ -105,7 +103,7 @@
                 const cinzaMedio = [0.657, 0.657, 0.657, 1.0];
                 const vermelho = [1.0, 0.2, 0.2, 1.0];
                 
-                // --- MUDANÇA: COR ANIMADA PARA AS LUZES ---
+                //COR ANIMADA PARA AS LUZES
                 const time = Date.now() / 600;
                 const r = Math.sin(time * 2.0) * 0.5 + 0.5;
                 const g = Math.sin(time * 1.5) * 0.5 + 0.5;
@@ -124,16 +122,15 @@
                 desenhaParte(olhoEsquerdoVertices, corAnimadaLuz, matrizIdentidade, gl.TRIANGLE_FAN);
                 desenhaParte(bracoEsquerdoVertices, cinzaClaro, matrizIdentidade);
 
-                // --- NOVO: ANIMAÇÃO DO CORAÇÃO PULSANTE ---
+                //ANIMAÇÃO DO CORAÇÃO PULSANTE
                 {
-                    // Usa o seno para criar um valor que oscila entre 0.8 e 1.0
+
                     const pulso = Math.sin(Date.now() / 200) * 0.1 + 0.9;
-                    // A matriz de transformação será uma escala a partir da origem (0,0)
                     const matrizDoCoracao = m3.scaling(pulso, pulso);
                     desenhaParte(coracaoVertices, vermelho, matrizDoCoracao, gl.TRIANGLE_FAN);
                 }
 
-                // --- Animação do braço direito (sem alteração) ---
+                // Animação do braço direito
                 {
                     const ombroX = 0.3;
                     const ombroY = 0.1;
@@ -153,4 +150,5 @@
             }
 
             animate();
+
         };
