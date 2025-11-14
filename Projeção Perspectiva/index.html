@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Exploração de Câmera e Projeção WebGL</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f0f0f0; 
+            display: flex;
+            flex-wrap: wrap;
+        }
+        canvas { 
+            display: block; 
+            border: 1px solid black; 
+            background-color: #333;
+        }
+        #controls {
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ccc;
+            margin: 10px;
+            width: 300px;
+        }
+        #controls h3 { margin-top: 0; }
+        #controls div { margin-bottom: 5px; }
+        #controls label {
+            display: inline-block;
+            width: 60px;
+        }
+        #controls input[type="range"] {
+            width: 200px;
+        }
+        #info {
+            padding: 10px;
+            margin: 10px;
+            background: #fff;
+            border: 1px solid #ccc;
+            font-family: 'Courier New', Courier, monospace;
+            flex-grow: 1;
+        }
+        #instructions {
+            width: 100%;
+            padding: 10px;
+            background: #ffffe0;
+            border: 1px solid #e6db55;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="glcanvas" width="800" height="600"></canvas>
+
+    <div id="controls">
+        <h3>Controles da Projeção (Frustum)</h3>
+        <div>
+            <label for="left">Left:</label>
+            <input type="range" id="left" min="-5" max="0" value="-1" step="0.1">
+            <span id="left_val">-1.0</span>
+        </div>
+        <div>
+            <label for="right">Right:</label>
+            <input type="range" id="right" min="0" max="5" value="1" step="0.1">
+            <span id="right_val">1.0</span>
+        </div>
+        <div>
+            <label for="bottom">Bottom:</label>
+            <input type="range" id="bottom" min="-5" max="0" value="-1" step="0.1">
+            <span id="bottom_val">-1.0</span>
+        </div>
+        <div>
+            <label for="top">Top:</label>
+            <input type="range" id="top" min="0" max="5" value="1" step="0.1">
+            <span id="top_val">1.0</span>
+        </div>
+        <div>
+            <label for="near">Near:</label>
+            <input type="range" id="near" min="0.01" max="5" value="1" step="0.01">
+            <span id="near_val">1.0</span>
+        </div>
+        <div>
+            <label for="far">Far:</label>
+            <input type="range" id="far" min="10" max="200" value="100" step="1">
+            <span id="far_val">100.0</span>
+        </div>
+    </div>
+
+    <div id="info">
+        <h3>Informações da Câmera</h3>
+        <pre id="camera_info"></pre>
+        <h3>Instruções</h3>
+        <p>
+            <b>W/S:</b> Mover para frente/trás<br>
+            <b>A/D:</b> Mover para esquerda/direita<br>
+            <b>Q/E:</b> Mover para cima/baixo<br>
+            <b>Setas ←/→:</b> Rotacionar (Yaw)<br>
+            <b>Mouse:</b> Clique e arraste para rotacionar
+        </p>
+    </div>
+
+<script>
+    // --- Início da "Mini-Biblioteca" de Matrizes/Vetores (Sem dependências!) ---
+    
+    // Funções de Vetor (vec3)
+    const vec3 = {
+        create: function() { return new Float32Array(3); },
+        fromValues: function(x, y, z) { return new Float32Array([x, y, z]); },
+        
+        add: function(out, a, b) {
+            out[0] = a[0] + b[0];
+            out[1] = a[1] + b[1];
+            out[2] = a[2] + b[2];
+            return out;
+        },
+        
+        subtract: function(out, a, b) {
+            out[0] = a[0] - b[0];
+            out[1] = a[1] - b[1];
+            out[2] = a[2] - b[2];
+            return out;
+        },
+        
+        scale: function(out, a, s) {
+            out[0] = a[0] * s;
+            out[1] = a[1] * s;
+            out[2] = a[2] * s;
+            return out;
+        },
+        
+        dot: function(a, b) {
+            return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        },
+
+        cross: function(out, a, b) {
+            let ax = a[0], ay = a[1], az = a[2];
+            let bx = b[0], by = b[1], bz = b[2];
+            out[0] = ay * bz - az * by;
+            out[1] = az * bx - ax * bz;
+            out[2] = ax * by - ay * bx;
+            return out;
+        },
+        
+        normalize: function(out, a) {
+            let x = a[0], y = a[1], z = a[2];
+            let len = x * x + y * y + z * z;
+            if (len > 0) {
+                len = 1 / Math.sqrt(len);
+            }
+            out[0] = a[0] * len;
+            out[1] = a[1] * len;
+            out[2] = a[2] * len;
+            return out;
+        }
+    };
+
+    // Funções de Matriz (mat4)
+    const mat4 = {
+        create: function() {
+            let out = new Float32Array(16);
+            out[0] = 1; out[5] = 1; out[10] = 1; out[15] = 1;
+            return out;
+        },
+        
+        identity: function(out) {
+            out[0] = 1; out[1] = 0; out[2] = 0; out[3] = 0;
+            out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0;
+            out[8] = 0; out[9] = 0; out[10] = 1; out[11] = 0;
+            out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1;
+            return out;
+        },
+        
+        frustum: function(out, left, right, bottom, top, near, far) {
+            let rl = 1 / (right - left);
+            let tb = 1 / (top - bottom);
+            let nf = 1 / (near - far);
+            out[0] = (near * 2) * rl;
+            out[1] = 0;
+            out[2] = 0;
+            out[3] = 0;
+            out[4] = 0;
+            out[5] = (near * 2) * tb;
+            out[6] = 0;
+            out[7] = 0;
+            out[8] = (right + left) * rl;
+            out[9] = (top + bottom) * tb;
+            out[10] = (far + near) * nf;
+            out[11] = -1;
+            out[12] = 0;
+            out[13] = 0;
+            out[14] = (far * near * 2) * nf;
+            out[15] = 0;
+            return out;
+        },
+        
+        lookAt: function(out, eye, center, up) {
+            let x0, x1, x2, y0, y1, y2, z0, z1, z2, len;
+            let eyex = eye[0], eyey = eye[1], eyez = eye[2];
+            let upx = up[0], upy = up[1], upz = up[2];
+            let centerx = center[0], centery = center[1], centerz = center[2];
+
+            z0 = eyex - centerx;
+            z1 = eyey - centery;
+            z2 = eyez - centerz;
+            len = 1 / Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2);
+            z0 *= len; z1 *= len; z2 *= len;
+
+            x0 = upy * z2 - upz * z1;
+            x1 = upz * z0 - upx * z2;
+            x2 = upx * z1 - upy * z0;
+            len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2);
+            if (!len) { x0 = 0; x1 = 0; x2 = 0; }
+            else { len = 1 / len; x0 *= len; x1 *= len; x2 *= len; }
+
+            y0 = z1 * x2 - z2 * x1;
+            y1 = z2 * x0 - z0 * x2;
+            y2 = z0 * x1 - z1 * x0;
+            len = Math.sqrt(y0 * y0 + y1 * y1 + y2 * y2);
+            if (!len) { y0 = 0; y1 = 0; y2 = 0; }
+            else { len = 1 / len; y0 *= len; y1 *= len; y2 *= len; }
+
+            out[0] = x0; out[1] = y0; out[2] = z0; out[3] = 0;
+            out[4] = x1; out[5] = y1; out[6] = z1; out[7] = 0;
+            out[8] = x2; out[9] = y2; out[10] = z2; out[11] = 0;
+            out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+            out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+            out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+            out[15] = 1;
+            return out;
+        }
+    };
+    // --- Fim da "Mini-Biblioteca" ---
+
+
+    // --- Variáveis Globais ---
+    let gl;
+    let shaderProgram;
+
+    // Matrizes
+    const modelMatrix = mat4.create();
+    const viewMatrix = mat4.create();
+    const projectionMatrix = mat4.create();
+
+    // Estado da Câmera
+    let cameraPosition = vec3.fromValues(3, 2, 5);
+    let cameraTarget = vec3.fromValues(0, 0, 0);
+    let cameraUp = vec3.fromValues(0, 1, 0);
+    let yaw = -135.0; // Rotação Y
+    let pitch = -20.0;  // Rotação X
+    let cameraFront = vec3.fromValues(0, 0, -1);
+    let cameraRight = vec3.fromValues(1, 0, 0);
+
+    // Controles de Movimento
+    const keysPressed = {};
+    const moveSpeed = 0.1;
+    const rotateSpeed = 1.0;
+
+    // Controles do Mouse
+    let isDragging = false;
+    let lastMouseX = 0;
+
+    // Configurações de Projeção (controladas pelos sliders)
+    const projectionSettings = {
+        left: -1, right: 1, bottom: -1, top: 1, near: 1, far: 100
+    };
+
+    // Buffers
+    let cubeBuffer, cubeColorBuffer, cubeIndexBuffer;
+    let planeBuffer, planeColorBuffer, planeIndexBuffer;
+    let axesBuffer, axesColorBuffer;
+
+    // --- Shaders ---
+    const vsSource = `
+        attribute vec4 aVertexPosition;
+        attribute vec4 aVertexColor;
+        
+        uniform mat4 uModelMatrix;
+        uniform mat4 uViewMatrix;
+        uniform mat4 uProjectionMatrix;
+        
+        varying lowp vec4 vColor;
+        
+        void main(void) {
+            gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * aVertexPosition;
+            vColor = aVertexColor;
+        }
+    `;
+
+    const fsSource = `
+        varying lowp vec4 vColor;
+        
+        void main(void) {
+            gl_FragColor = vColor;
+        }
+    `;
+
+    // --- Função Principal ---
+    window.onload = function main() {
+        const canvas = document.getElementById('glcanvas');
+        gl = canvas.getContext('webgl');
+        
+        if (!gl) {
+            alert('WebGL não suportado!');
+            return;
+        }
+        
+        shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+        
+        // Coletando localizações dos atributos e uniformes
+        shaderProgram.vertexPosition = gl.getAttribLocation(shaderProgram, 'aVertexPosition');
+        shaderProgram.vertexColor = gl.getAttribLocation(shaderProgram, 'aVertexColor');
+        shaderProgram.modelMatrix = gl.getUniformLocation(shaderProgram, 'uModelMatrix');
+        shaderProgram.viewMatrix = gl.getUniformLocation(shaderProgram, 'uViewMatrix');
+        shaderProgram.projectionMatrix = gl.getUniformLocation(shaderProgram, 'uProjectionMatrix');
+
+        // Inicializa os buffers dos objetos
+        initBuffers();
+        
+        // Configura os event listeners
+        setupEventListeners();
+
+        // Inicia o loop de renderização
+        requestAnimationFrame(render);
+    }
+
+    // --- Inicialização ---
+
+    function initShaderProgram(gl, vsSource, fsSource) {
+        const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+        
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+        
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert('Erro ao lincar shaders: ' + gl.getProgramInfoLog(shaderProgram));
+            return null;
+        }
+        
+        return shaderProgram;
+    }
+
+    function loadShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert('Erro ao compilar shader: ' + gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+            return null;
+        }
+        
+        return shader;
+    }
+
+    function initBuffers() {
+        // --- 1. Cubo ---
+        const cubeVertices = [
+            // Frente
+            -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,
+            // Trás
+            -0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5, -0.5,
+            // Topo
+            -0.5,  0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,
+            // Base
+            -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  0.5, -0.5, -0.5,  0.5,
+            // Direita
+             0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,
+            // Esquerda
+            -0.5, -0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
+        ];
+        
+        const cubeColors = [
+            // Cores para cada face (4 vértices por face)
+            [1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, 1.0], // Frente (Vermelho)
+            [0.0, 1.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], // Trás (Verde)
+            [0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0], // Topo (Azul)
+            [1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 0.0, 1.0], // Base (Amarelo)
+            [1.0, 0.0, 1.0, 1.0], [1.0, 0.0, 1.0, 1.0], [1.0, 0.0, 1.0, 1.0], [1.0, 0.0, 1.0, 1.0], // Direita (Magenta)
+            [0.0, 1.0, 1.0, 1.0], [0.0, 1.0, 1.0, 1.0], [0.0, 1.0, 1.0, 1.0], [0.0, 1.0, 1.0, 1.0], // Esquerda (Ciano)
+        ];
+        let flatCubeColors = [];
+        for (let c of cubeColors) { flatCubeColors = flatCubeColors.concat(c); }
+
+        const cubeIndices = [
+            0,  1,  2,      0,  2,  3,    // Frente
+            4,  5,  6,      4,  6,  7,    // Trás
+            8,  9,  10,     8,  10, 11,   // Topo
+            12, 13, 14,     12, 14, 15,   // Base
+            16, 17, 18,     16, 18, 19,   // Direita
+            20, 21, 22,     20, 22, 23,   // Esquerda
+        ];
+
+        cubeBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.STATIC_DRAW);
+        
+        cubeColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(flatCubeColors), gl.STATIC_DRAW);
+        
+        cubeIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeIndexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeIndices), gl.STATIC_DRAW);
+
+        // --- 2. Plano (Chão) ---
+        const planeSize = 10;
+        const planeVertices = [
+            -planeSize, 0.0, -planeSize,
+             planeSize, 0.0, -planeSize,
+             planeSize, 0.0,  planeSize,
+            -planeSize, 0.0,  planeSize,
+        ];
+        const planeColors = [
+            0.5, 0.5, 0.5, 1.0,
+            0.5, 0.5, 0.5, 1.0,
+            0.5, 0.5, 0.5, 1.0,
+            0.5, 0.5, 0.5, 1.0,
+        ];
+        const planeIndices = [0, 1, 2, 0, 2, 3];
+
+        planeBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(planeVertices), gl.STATIC_DRAW);
+        
+        planeColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, planeColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(planeColors), gl.STATIC_DRAW);
+        
+        planeIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, planeIndexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(planeIndices), gl.STATIC_DRAW);
+
+        // --- 3. Eixos Coordenados ---
+        const axisLen = 50;
+        const axesVertices = [
+             0.0,  0.0,  0.0,   axisLen,  0.0,  0.0, // Eixo X
+             0.0,  0.0,  0.0,   0.0,  axisLen,  0.0, // Eixo Y
+             0.0,  0.0,  0.0,   0.0,  0.0,  axisLen, // Eixo Z
+        ];
+        const axesColors = [
+            1.0, 0.0, 0.0, 1.0,   1.0, 0.0, 0.0, 1.0, // Vermelho (X)
+            0.0, 1.0, 0.0, 1.0,   0.0, 1.0, 0.0, 1.0, // Verde (Y)
+            0.0, 0.0, 1.0, 1.0,   0.0, 0.0, 1.0, 1.0, // Azul (Z)
+        ];
+        
+        axesBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, axesBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(axesVertices), gl.STATIC_DRAW);
+        
+        axesColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, axesColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(axesColors), gl.STATIC_DRAW);
+    }
+    
+    // --- Loop de Renderização ---
+
+    function render() {
+        // Atualiza estado (movimento, projeção)
+        updateCamera();
+        updateProjection();
+        updateInfo();
+
+        // Limpa a tela
+        gl.clearColor(0.2, 0.2, 0.2, 1.0);
+        gl.clearDepth(1.0);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        gl.useProgram(shaderProgram);
+
+        // Configura Matriz de Visão (Câmera)
+        const target = vec3.add(vec3.create(), cameraPosition, cameraFront);
+        mat4.lookAt(viewMatrix, cameraPosition, target, cameraUp);
+        
+        // Configura Matriz de Projeção
+        mat4.frustum(projectionMatrix,
+            projectionSettings.left, projectionSettings.right,
+            projectionSettings.bottom, projectionSettings.top,
+            projectionSettings.near, projectionSettings.far
+        );
+
+        // Passa as matrizes de visão e projeção para os shaders
+        gl.uniformMatrix4fv(shaderProgram.viewMatrix, false, viewMatrix);
+        gl.uniformMatrix4fv(shaderProgram.projectionMatrix, false, projectionMatrix);
+
+        // --- Desenha os objetos ---
+
+        // Matriz de modelo (identidade, pois todos estão na origem)
+        mat4.identity(modelMatrix);
+        gl.uniformMatrix4fv(shaderProgram.modelMatrix, false, modelMatrix);
+
+        // Desenha o Plano
+        drawObject(planeBuffer, planeColorBuffer, planeIndexBuffer, 6);
+
+        // Desenha o Cubo
+        drawObject(cubeBuffer, cubeColorBuffer, cubeIndexBuffer, 36);
+
+        // Desenha os Eixos
+        drawAxes();
+
+        // Próximo frame
+        requestAnimationFrame(render);
+    }
+
+    function drawObject(posBuffer, colorBuffer, idxBuffer, vertexCount) {
+        // Posição
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shaderProgram.vertexPosition);
+        
+        // Cor
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColor, 4, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shaderProgram.vertexColor);
+        
+        // Índice
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+        
+        // Desenha
+        gl.drawElements(gl.TRIANGLES, vertexCount, gl.UNSIGNED_SHORT, 0);
+    }
+
+    function drawAxes() {
+        // Posição
+        gl.bindBuffer(gl.ARRAY_BUFFER, axesBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shaderProgram.vertexPosition);
+        
+        // Cor
+        gl.bindBuffer(gl.ARRAY_BUFFER, axesColorBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColor, 4, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shaderProgram.vertexColor);
+        
+        // Desenha (usando LINES)
+        gl.drawArrays(gl.LINES, 0, 6); // 6 vértices, 3 linhas
+    }
+
+    // --- Controles e Eventos ---
+
+    function setupEventListeners() {
+        // Teclado
+        document.addEventListener('keydown', (e) => { keysPressed[e.key.toUpperCase()] = true; });
+        document.addEventListener('keyup', (e) => { keysPressed[e.key.toUpperCase()] = false; });
+
+        // Mouse
+        const canvas = document.getElementById('glcanvas');
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+        });
+        document.addEventListener('mouseup', () => { isDragging = false; });
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - lastMouseX;
+            yaw += deltaX * 0.5; // Ajusta sensibilidade
+            lastMouseX = e.clientX;
+        });
+
+        // Sliders de Projeção
+        const sliders = ['left', 'right', 'bottom', 'top', 'near', 'far'];
+        sliders.forEach(id => {
+            const slider = document.getElementById(id);
+            const valSpan = document.getElementById(`${id}_val`);
+            slider.addEventListener('input', () => {
+                projectionSettings[id] = parseFloat(slider.value);
+                valSpan.textContent = parseFloat(slider.value).toFixed(2);
+            });
+            // Seta valor inicial
+            projectionSettings[id] = parseFloat(slider.value);
+            valSpan.textContent = parseFloat(slider.value).toFixed(2);
+        });
+    }
+
+    function updateCamera() {
+        // Rotação (Setas)
+        if (keysPressed['ARROWLEFT']) yaw -= rotateSpeed;
+        if (keysPressed['ARROWRIGHT']) yaw += rotateSpeed;
+        
+        // Atualiza vetores da câmera baseados no Yaw/Pitch
+        const radYaw = yaw * Math.PI / 180;
+        const radPitch = pitch * Math.PI / 180;
+        
+        let front = vec3.create();
+        front[0] = Math.cos(radYaw) * Math.cos(radPitch);
+        front[1] = Math.sin(radPitch);
+        front[2] = Math.sin(radYaw) * Math.cos(radPitch);
+        vec3.normalize(cameraFront, front);
+        
+        // Recalcula Right e Up
+        vec3.cross(cameraRight, cameraFront, [0, 1, 0]); // O "Up" do mundo
+        vec3.normalize(cameraRight, cameraRight);
+        vec3.cross(cameraUp, cameraRight, cameraFront);
+        vec3.normalize(cameraUp, cameraUp);
+
+        // Movimento (Teclado)
+        const velocity = vec3.create();
+        if (keysPressed['W']) {
+            vec3.scale(velocity, cameraFront, moveSpeed);
+            vec3.add(cameraPosition, cameraPosition, velocity);
+        }
+        if (keysPressed['S']) {
+            vec3.scale(velocity, cameraFront, moveSpeed);
+            vec3.subtract(cameraPosition, cameraPosition, velocity);
+        }
+        if (keysPressed['A']) {
+            vec3.scale(velocity, cameraRight, moveSpeed);
+            vec3.subtract(cameraPosition, cameraPosition, velocity);
+        }
+        if (keysPressed['D']) {
+            vec3.scale(velocity, cameraRight, moveSpeed);
+            vec3.add(cameraPosition, cameraPosition, velocity);
+        }
+        // Q/E move no eixo Y global (para cima/baixo)
+        if (keysPressed['E']) cameraPosition[1] += moveSpeed;
+        if (keysPressed['Q']) cameraPosition[1] -= moveSpeed;
+    }
+    
+    function updateProjection() {
+        // Os sliders já atualizam o objeto projectionSettings
+        // A função render() lê diretamente dele
+    }
+
+    function updateInfo() {
+        // Mostra dados da câmera no painel de info
+        const infoEl = document.getElementById('camera_info');
+        const pos = cameraPosition.map(v => v.toFixed(2));
+        const front = cameraFront.map(v => v.toFixed(2));
+        infoEl.textContent = 
+`Posição: [${pos[0]}, ${pos[1]}, ${pos[2]}]
+Frente:  [${front[0]}, ${front[1]}, ${front[2]}]
+Yaw:     ${yaw.toFixed(1)}°
+Pitch:   ${pitch.toFixed(1)}°`;
+    }
+
+</script>
+
+</body>
+</html>
