@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL - Câmera Livre e Personagem</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #f0f0f0; }
+        canvas { width: 100vw; height: 100vh; display: block; cursor: move; }
+        #instructions {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(255,255,255,0.9); padding: 15px;
+            font-family: sans-serif; border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            pointer-events: none;
+            user-select: none;
+        }
+        kbd {
+            background-color: #eee;
+            border: 1px solid #b4b4b4;
+            border-radius: 3px;
+            padding: 2px 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="instructions">
+        <h3>Controles</h3>
+        <p>🖱️ <b>Mouse (Arrastar)</b>: Girar Câmera</p>
+        <p><kbd>W</kbd> / <kbd>S</kbd> : Andar</p>
+        <p><kbd>A</kbd> / <kbd>D</kbd> : Girar Personagem</p>
+    </div>
+    
+    <canvas id="glCanvas"></canvas>
+
+    <script src="https://webglfundamentals.org/webgl/resources/m4.js"></script>
+    
+    <script src="camera.js"></script>
+
+</body>
+</html>
