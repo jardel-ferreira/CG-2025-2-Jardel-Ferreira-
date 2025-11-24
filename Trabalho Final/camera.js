@@ -1,6 +1,4 @@
-// ========================================================
 // 1. SHADERS (Padrão)
-// ========================================================
 const vertexShaderSource = `
     attribute vec4 a_position;
     uniform mat4 u_matrix;
@@ -37,9 +35,7 @@ function createProgram(gl, vsSource, fsSource) {
     return program;
 }
 
-// ========================================================
 // 2. ESTADO DO JOGO
-// ========================================================
 
 const player = {
     x: 0,
@@ -50,7 +46,7 @@ const player = {
     turnSpeed: 3.0
 };
 
-// Estado da Câmera (Independente do jogador)
+// Estado da Câmera
 const camera = {
     angleX: 0,      // Rotação horizontal (orbit)
     angleY: 0.5,    // Rotação vertical (altura)
@@ -59,10 +55,7 @@ const camera = {
 
 const keys = {};
 
-// ========================================================
 // 3. INPUTS (TECLADO E MOUSE)
-// ========================================================
-
 window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
@@ -97,9 +90,7 @@ window.addEventListener('mousemove', e => {
     }
 });
 
-// ========================================================
 // 4. MAIN & RENDER
-// ========================================================
 
 function main() {
     const gl = canvas.getContext('webgl');
@@ -239,4 +230,5 @@ function main() {
 }
 
 // Inicia o jogo quando a janela carregar
+
 window.onload = main;
